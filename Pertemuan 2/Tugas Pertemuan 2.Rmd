@@ -1,0 +1,514 @@
+---
+title: "Tugas Pertemuan 2"
+author: "Anastasia Salma Irwansyah - M0401241041"
+output:
+  html_document: 
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+---
+
+## Library / Packages
+
+```{r}
+library(forecast)
+library(TTR)
+library(readxl)
+library(ggplot2)
+```
+
+## Impor Data
+
+```{r}
+datampdw1 <- read_excel("C:/Users/anast/Documents/coolyeah/SMT 5/Metode Peramalan Deret Waktu/mpdw/Pertemuan 2/data mpdw.xlsx", sheet = "orang 4")
+head(datampdw1)
+```
+
+## Eksplorasi Data
+
+```{r}
+View(datampdw1)
+str(datampdw1)
+dim(datampdw1)
+```
+
+Mengubah data agar terbaca sebagai data deret waktu dengan fungsi `ts()` .
+
+```{r}
+datampdw1.ts <- ts(datampdw1$global_temperature_anomaly_C)
+```
+
+Menampilkan ringkasan data
+
+```{r}
+summary(datampdw1.ts)
+```
+
+Membuat plot data deret waktu
+
+```{r}
+ts.plot(datampdw1.ts, xlab = "Periode ke-t", ylab = "Anomali Suhu (C)",
+        main = "Plot Deret Waktu - Anomali Suhu Global")
+points(datampdw1.ts)
+```
+
+## Pembagian Data Latih dan Data Uji
+
+Data dibagi 80% data latih dan 20% data uji
+
+```{r}
+# hitung jumlah data
+n <- nrow(datampdw1)
+
+# tentukan batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training <- datampdw1[1:n_train, ]
+testing  <- datampdw1[(n_train + 1):n, ]
+
+# ubah ke time series
+train.ts <- ts(training$global_temperature_anomaly_C)
+test.ts  <- ts(testing$global_temperature_anomaly_C)
+
+# jumlah data uji, dipakai otomatis di h=n_test & perhitungan error
+n_test <- nrow(testing)
+n_train; n_test
+```
+
+```{r}
+#eksplorasi keseluruhan data
+plot(datampdw1.ts, col = "red", main = "Plot Semua Data")
+points(datampdw1.ts)
+
+#eksplorasi data latih
+plot(train.ts, col = "blue", main = "Plot Data Latih")
+points(train.ts)
+
+#eksplorasi data uji
+plot(test.ts, col = "blue", main = "Plot Data Uji")
+points(test.ts)
+```
+
+Plot data latih menunjukkan fluktuasi naik-turun di sekitar level yang perlahan meningkat, sedangkan plot data uji menunjukkan pola berosilasi di kisaran 0,7-1,16°C tanpa kenaikan yang jelas melanjutkan tren akhir data latih.
+
+```{r}
+ggplot() +
+  geom_line(data = training, aes(x = seq_along(global_temperature_anomaly_C),
+                                  y = global_temperature_anomaly_C, col = "Data Latih")) +
+  geom_line(data = testing, aes(x = seq_along(global_temperature_anomaly_C) + n_train,
+                                 y = global_temperature_anomaly_C, col = "Data Uji")) +
+  labs(x = "Periode ke-t", y = "Anomali Suhu (C)") +
+  scale_colour_manual(name = "Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                       values = c("blue", "red")) +
+  theme_bw() + theme(legend.position = "bottom")
+```
+
+Plot gabungan menunjukkan bahwa data uji (merah) berada pada level yang mirip dengan bagian akhir data latih (biru), bukan pada level yang jauh lebih tinggi. Hal ini sesuai dengan indikasi bahwa tren jangka pendek tidak terlalu kuat untuk diekstrapolasi secara linier jauh ke depan.
+
+
+## 1. Single Moving Average (SMA)
+
+```{r}
+data.sma <- SMA(train.ts, n = 4)
+data.sma
+```
+```{r}
+# forecast 1 periode ke depan
+data.ramal <- c(NA, data.sma)
+data.ramal
+```
+
+```{r}
+# forecast sepanjang data uji (n_test periode) -> nilai konstan = SMA terakhir
+ramalan.sma.test <- rep(data.ramal[length(data.ramal)], n_test)
+```
+
+
+```{r}
+ts.plot(datampdw1.ts, xlab = "Periode ke-t", ylab = "Anomali Suhu (C)",
+        main = "SMA (m=4) Data Anomali Suhu Global")
+points(datampdw1.ts)
+lines(c(data.sma, rep(NA, n_test)), col = "green", lwd = 2)
+lines(c(data.ramal, rep(ramalan.sma.test[1], n_test - 1)), col = "red", lwd = 2)
+legend("topleft", c("aktual", "pemulusan", "peramalan"), lty = 1,
+       col = c("black", "green", "red"), cex = 0.6)
+```
+
+### Akurasi Data Latih
+
+```{r}
+m <- 4
+error_train.sma <- train.ts - data.ramal[1:length(train.ts)]
+idx <- (m + 1):length(train.ts)   # buang periode awal yang NA (m dari SMA + 1 dari pergeseran c(NA, ...))
+
+SSE_train.sma <- sum(error_train.sma[idx]^2)
+MSE_train.sma <- mean(error_train.sma[idx]^2)
+RMSE_train.sma <- sqrt(MSE_train.sma)
+MAPE_train.sma <- mean(abs(error_train.sma[idx] / train.ts[idx])) * 100
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, RMSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.sma) <- "SMA m=4"
+akurasi_train.sma
+```
+
+Nilai MAPE data latih (≈15,2%) berada pada kategori akurasi "baik", artinya rata-rata galat pemulusan sekitar 15% dari nilai aktual.
+
+### Akurasi Data Uji
+
+```{r}
+error_test.sma <- test.ts - ramalan.sma.test
+
+SSE_test.sma <- sum(error_test.sma^2)
+MSE_test.sma <- mean(error_test.sma^2)
+RMSE_test.sma <- sqrt(MSE_test.sma)
+MAPE_test.sma <- mean(abs(error_test.sma / test.ts)) * 100
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, RMSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.sma) <- "Akurasi SMA m=4"
+akurasi_test.sma
+```
+
+Nilai MAPE data uji sekitar (≈9,4%), lebih kecil dari data latih. Hal ini terjadi karena hasil ramalan SMA tetap dan nilainya mendekati rata-rata data uji yang naik turun tanpa pola perubahan yang jelas. Ini menunjukkan bahwa anggapan data cenderung tetap cukup sesuai, dengan MAPE < 10% yang termasuk kategori sangat baik.
+
+
+## 2. Double Moving Average (DMA)
+
+```{r}
+dma  <- SMA(data.sma, n = m)
+At   <- 2 * data.sma - dma
+Bt   <- (2 / (m - 1)) * (data.sma - dma)
+data.dma <- At + Bt
+data.ramal2 <- c(NA, data.dma)
+
+h <- 1:n_test
+f <- At[length(At)] + Bt[length(Bt)] * h   # forecast h periode ke depan
+```
+
+```{r}
+ts.plot(datampdw1.ts, xlab = "Periode ke-t", ylab = "Anomali Suhu (C)",
+        main = "DMA (m=4) Data Anomali Suhu Global")
+points(datampdw1.ts)
+lines(c(At, rep(NA, n_test)), col = "green", lwd = 2)
+lines(c(data.ramal2, f[-1]), col = "red", lwd = 2)
+legend("topleft", c("aktual", "pemulusan", "peramalan"), lty = 1,
+       col = c("black", "green", "red"), cex = 0.6)
+```
+
+### Akurasi Data Latih
+
+```{r}
+error_train.dma <- train.ts - data.ramal2[1:length(train.ts)]
+idx2 <- (2 * m):length(train.ts)   # buang periode awal yang NA (2 tahap MA + pergeseran c(NA, ...))
+
+SSE_train.dma <- sum(error_train.dma[idx2]^2)
+MSE_train.dma <- mean(error_train.dma[idx2]^2)
+RMSE_train.dma <- sqrt(MSE_train.dma)
+MAPE_train.dma <- mean(abs(error_train.dma[idx2] / train.ts[idx2])) * 100
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, RMSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.dma) <- "DMA m=4"
+akurasi_train.dma
+```
+
+Pada data latih, MAPE DMA (≈17%) sedikit lebih tinggi daripada SMA (≈15%). Hal ini karena data relatif stabil tanpa tren kuat, sehingga pemulusan ganda DMA tidak meningkatkan akurasi secara signifikan.
+
+
+### Akurasi Data Uji
+
+```{r}
+error_test.dma <- test.ts - f
+
+SSE_test.dma <- sum(error_test.dma^2)
+MSE_test.dma <- mean(error_test.dma^2)
+RMSE_test.dma <- sqrt(MSE_test.dma)
+MAPE_test.dma <- mean(abs(error_test.dma / test.ts)) * 100
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, RMSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.dma) <- "Akurasi DMA m=4"
+akurasi_test.dma
+```
+
+Pada data uji, MAPE DMA melonjak hingga >100%, jauh lebih buruk dari SMA. Hal ini terjadi karena DMA terus memproyeksikan tren linier, sementara data aktual naik-turun tanpa pola yang jelas. Ini menunjukkan bahwa metode berbasis tren tidak selalu lebih akurat, terutama untuk prediksi jangka panjang.
+
+
+## 3. Single Exponential Smoothing (SES)
+
+Dicoba tiga skenario: α = 0.2, α = 0.7, dan α optimum (dioptimasi otomatis).
+
+```{r}
+ses.1 <- ses(train.ts, h = n_test, alpha = 0.2)
+ses.2 <- ses(train.ts, h = n_test, alpha = 0.7)
+ses.opt <- ses(train.ts, h = n_test, alpha = NULL)
+ses.opt$model   # lihat alpha optimum yang terpilih
+```
+
+Nilai α optimum dari R sebesar ≈0,75 menunjukkan bahwa model lebih mengikuti data terbaru. Hal ini sesuai dengan pola data yang cenderung berubah cukup cepat, sehingga data lama kurang berpengaruh terhadap hasil ramalan.
+
+```{r}
+autoplot(ses.opt) +
+  autolayer(fitted(ses.opt), series = "Fitted") +
+  ylab("Anomali Suhu (C)") + xlab("Periode")
+```
+
+### Akurasi Data Latih
+
+```{r}
+acc_ses1   <- accuracy(ses.1, testing$global_temperature_anomaly_C)
+acc_ses2   <- accuracy(ses.2, testing$global_temperature_anomaly_C)
+acc_sesopt <- accuracy(ses.opt, testing$global_temperature_anomaly_C)
+```
+
+```{r}
+acc_ses1["Training set", ]
+acc_ses2["Training set", ]
+acc_sesopt["Training set", ]
+```
+
+Pada data latih, ketiga skenario memiliki MAPE yang hampir sama (13,68% dan 14,02%). α optimum memberikan MAPE terendah, sesuai karena parameter tersebut dioptimalkan berdasarkan data latih.
+
+### Akurasi Data Uji
+
+```{r}
+acc_ses1["Test set", ]
+acc_ses2["Test set", ]
+acc_sesopt["Test set", ]
+```
+
+Pada data uji, ses.2 (α=0,7) memiliki MAPE terendah (≈9,0%), disusul ses.opt (≈9,3%) dan ses.1 (≈14,5%). Perbandingan antar-metode dibahas lebih lanjut pada bagian Perbandingan Metode.
+
+
+## 4. Double Exponential Smoothing (DES)
+
+Karena data memiliki indikasi tren (meski lemah), dicoba juga DES dengan HoltWinters(gamma = FALSE) menggunakan beberapa skenario alpha & beta, serta parameter optimum.
+
+```{r}
+des.1 <- HoltWinters(train.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
+ramalandes1 <- forecast(des.1, h = n_test)
+
+des.2 <- HoltWinters(train.ts, gamma = FALSE, beta = 0.3, alpha = 0.6)
+ramalandes2 <- forecast(des.2, h = n_test)
+
+des.opt <- HoltWinters(train.ts, gamma = FALSE)   # alpha & beta dioptimasi otomatis
+des.opt$alpha; des.opt$beta
+ramalandesopt <- forecast(des.opt, h = n_test)
+```
+
+Hasil optimasi DES menghasilkan α = 0,857 dan β = 0,069. Nilai α yang tinggi menunjukkan model lebih mengikuti perubahan data terbaru, sedangkan β yang rendah menunjukkan komponen tren relatif lemah dan tidak banyak berubah. Hasil ini memperkuat bahwa pola data lebih didominasi fluktuasi daripada tren, sehingga SES lebih sesuai dibandingkan DES.
+
+```{r}
+plot(datampdw1.ts, main = "DES (Optimum) Data Anomali Suhu Global",
+     xlab = "Periode ke-t", ylab = "Anomali Suhu (C)")
+lines(des.opt$fitted[, 1], lty = 2, col = "blue")
+lines(ramalandesopt$mean, col = "red")
+legend("topleft", c("aktual", "pemulusan", "peramalan"), lty = 1,
+       col = c("black", "blue", "red"), cex = 0.6)
+```
+
+Plot menunjukkan fitted DES cukup mengikuti data aktual pada data latih, meskipun sedikit tertinggal. Namun, pada data uji, ramalan DES cenderung terus menurun, sementara data aktual justru berfluktuasi dan sempat kembali naik. Hal ini menunjukkan tren negatif di akhir data latih tidak berlanjut, sehingga proyeksi DES kurang sesuai dengan pola aktual.
+
+### Akurasi Data Latih
+
+```{r}
+acc_des1   <- accuracy(ramalandes1, testing$global_temperature_anomaly_C)
+acc_des2   <- accuracy(ramalandes2, testing$global_temperature_anomaly_C)
+acc_desopt <- accuracy(ramalandesopt, testing$global_temperature_anomaly_C)
+```
+
+```{r}
+acc_des1["Training set", ]
+acc_des2["Training set", ]
+acc_desopt["Training set", ]
+```
+
+Pada data latih, des.1 dan des.2 menghasilkan MAPE 18,25% dan 14,98%, sedangkan des.opt paling rendah di 14,47%.
+
+### Akurasi Data Uji
+
+```{r}
+acc_des1["Test set", ]
+acc_des2["Test set", ]
+acc_desopt["Test set", ]
+```
+
+Pada data uji, des.1 memiliki MAPE 25,14%, sedangkan des.2 mencapai 100,33%. Sementara itu, des.opt hanya 14,54% dan hasilnya lebih konsisten dengan data latih. Hal ini menunjukkan bahwa bobot tren yang lebih besar justru menurunkan akurasi, sehingga des.opt menjadi pilihan terbaik.
+
+
+##  Holt-Winters
+
+```{r}
+# membuat ulang objek `ts` khusus dengan `frequency = 12`
+train.ts.musiman <- ts(training$global_temperature_anomaly_C, frequency = 12)
+test.ts.musiman  <- ts(testing$global_temperature_anomaly_C, frequency = 12)
+```
+
+## 5. Winter Aditif
+
+```{r}
+# skenario parameter manual (contoh)
+winter.add1 <- HoltWinters(train.ts.musiman, alpha = 0.2, beta = 0.1,
+                            gamma = 0.1, seasonal = "additive")
+
+# skenario parameter optimum (dioptimasi otomatis oleh R)
+winter.add.opt <- HoltWinters(train.ts.musiman, seasonal = "additive")
+winter.add.opt$alpha; winter.add.opt$beta; winter.add.opt$gamma
+```
+
+```{r}
+fc.add1   <- predict(winter.add1,   n.ahead = n_test)
+fc.add.opt <- predict(winter.add.opt, n.ahead = n_test)
+```
+
+
+```{r}
+plot(train.ts.musiman, main = "Winter Aditif (Optimum) Data Anomali Suhu Global", xlab = "Periode ke-t",
+     ylab = "Anomali Suhu (C)")
+lines(winter.add.opt$fitted[, 1], col = "blue")
+lines(fc.add.opt, col = "red")
+legend("topleft", c("aktual", "pemulusan", "peramalan"),
+       col = c("black", "blue", "red"), lty = 1, cex = 0.6)
+```
+
+### Akurasi Data Latih
+
+```{r}
+hitung_akurasi_latih <- function(model, train_ts) {
+  fit <- model$fitted[, 1]
+  actual <- train_ts[(length(train_ts) - length(fit) + 1):length(train_ts)]
+  err <- actual - fit
+  SSE <- sum(err^2)
+  MSE <- mean(err^2)
+  RMSE <- sqrt(MSE)
+  MAPE <- mean(abs(err / actual)) * 100
+  matrix(c(SSE, MSE, RMSE, MAPE), dimnames = list(c("SSE","MSE","RMSE","MAPE"), "Akurasi Holt Winters Aditif"))
+}
+
+akurasi_train.add1   <- hitung_akurasi_latih(winter.add1, train.ts.musiman)
+akurasi_train.addopt <- hitung_akurasi_latih(winter.add.opt, train.ts.musiman)
+akurasi_train.add1
+akurasi_train.addopt
+```
+
+### Akurasi Data Uji
+
+```{r}
+hitung_akurasi_uji <- function(forecast_obj, actual_test) {
+  err <- as.numeric(actual_test) - as.numeric(forecast_obj)
+  SSE <- sum(err^2)
+  MSE <- mean(err^2)
+  RMSE <- sqrt(MSE)
+  MAPE <- mean(abs(err / actual_test)) * 100
+  matrix(c(SSE, MSE, RMSE, MAPE), dimnames = list(c("SSE","MSE","RMSE","MAPE"), "Akurasi Holt Winters Aditif"))
+}
+
+akurasi_test.add1   <- hitung_akurasi_uji(fc.add1,   testing$global_temperature_anomaly_C)
+akurasi_test.addopt <- hitung_akurasi_uji(fc.add.opt, testing$global_temperature_anomaly_C)
+akurasi_test.add1
+akurasi_test.addopt
+```
+
+Pada data latih, model manual dan optimum memiliki MAPE yang hampir sama (14,86% dan 14,64%). Namun pada data uji, MAPE model manual naik menjadi 37,00%, sedangkan model optimum hanya 9,89%. Perbedaan ini terutama dipengaruhi oleh nilai γ, di mana γ manual terlalu kecil sehingga pola musiman kurang menyesuaikan perubahan data. Sebaliknya, γ optimum yang lebih besar membuat model lebih cepat menyesuaikan pola musiman, sehingga menghasilkan ramalan yang lebih akurat.
+
+
+## 6. Winter Multiplikatif
+
+```{r}
+winter.mult.opt <- HoltWinters(train.ts.musiman, seasonal = "multiplicative")
+winter.mult.opt$alpha; winter.mult.opt$beta; winter.mult.opt$gamma
+xhat.multopt <- winter.mult.opt$fitted[, 1]
+
+idx_hw <- (frequency(train.ts.musiman) + 1):length(train.ts.musiman)  # buang 1 musim awal (periode inisialisasi)
+```
+
+```{r}
+fc.mult.opt <- predict(winter.mult.opt, n.ahead = n_test)
+```
+
+```{r}
+plot(train.ts.musiman, main = "Winter Multiplikatif (Optimum) Data Anomali Suhu Global",
+     xlab = "Periode ke-t", ylab = "Anomali Suhu (C)")
+lines(winter.mult.opt$fitted[, 1], col = "blue")
+lines(fc.mult.opt, col = "red")
+legend("topleft", c("aktual", "pemulusan", "peramalan"),
+       col = c("black", "blue", "red"), lty = 1, cex = 0.6)
+```
+
+
+### Akurasi Data Latih
+
+```{r}
+error_train.hwmultopt <- train.ts.musiman[idx_hw] - xhat.multopt
+SSE_train.hwmultopt  <- sum(error_train.hwmultopt^2)
+MSE_train.hwmultopt  <- mean(error_train.hwmultopt^2)
+RMSE_train.hwmultopt <- sqrt(MSE_train.hwmultopt)
+MAPE_train.hwmultopt <- mean(abs(error_train.hwmultopt / train.ts.musiman[idx_hw])) * 100
+
+akurasi_train.hwmultopt <- matrix(c(SSE_train.hwmultopt, MSE_train.hwmultopt, RMSE_train.hwmultopt, MAPE_train.hwmultopt))
+row.names(akurasi_train.hwmultopt) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.hwmultopt) <- "Holt Winters Multiplikatif"
+akurasi_train.hwmultopt
+```
+
+### Akurasi Data Uji
+```{r}
+error_test.hwmultopt <- testing$global_temperature_anomaly_C - as.numeric(fc.mult.opt)
+SSE_test.hwmultopt  <- sum(error_test.hwmultopt^2)
+MSE_test.hwmultopt  <- mean(error_test.hwmultopt^2)
+RMSE_test.hwmultopt <- sqrt(MSE_test.hwmultopt)
+MAPE_test.hwmultopt <- mean(abs(error_test.hwmultopt / testing$global_temperature_anomaly_C)) * 100
+
+akurasi_test.hwmultopt <- matrix(c(SSE_test.hwmultopt, MSE_test.hwmultopt, RMSE_test.hwmultopt, MAPE_test.hwmultopt))
+row.names(akurasi_test.hwmultopt) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.hwmultopt) <- "Akurasi Holt Winters Multiplikatif"
+akurasi_test.hwmultopt
+```
+
+Model multiplikatif optimum memiliki MAPE data latih yang hampir sama dengan model aditif (14,82% dan 14,64%), tetapi pada data uji jauh lebih buruk (51,28% dan 9,89%). Hal ini karena model multiplikatif menganggap pola musiman berubah mengikuti level data, sedangkan pada anomali suhu fluktuasinya cenderung tetap. Akibatnya, ramalan multiplikatif kurang sesuai dengan pola data uji.
+
+
+## Perbandingan Metode
+
+```{r}
+# fungsi akurasi generik: bandingkan actual dengan forecast
+hitung_akurasi <- function(actual, forecast) {
+  err <- actual - as.numeric(forecast)
+  c(SSE  = sum(err^2),
+    MSE  = mean(err^2),
+    RMSE = sqrt(mean(err^2)),
+    MAPE = mean(abs(err / actual)) * 100)
+}
+
+actual_test <- testing$global_temperature_anomaly_C
+
+# daftar semua ramalan data uji, satu per model
+daftar_ramalan <- list(
+  SMA_m4          = ramalan.sma.test,
+  DMA_m4          = f,
+  SES_a02         = ses.1$mean,
+  SES_a07         = ses.2$mean,
+  SES_optimum     = ses.opt$mean,
+  DES_a02b02      = ramalandes1$mean,
+  DES_a06b03      = ramalandes2$mean,
+  DES_optimum     = ramalandesopt$mean,
+  HW_add_manual   = fc.add1,
+  HW_add_optimum  = fc.add.opt,
+  HW_mult_optimum = fc.mult.opt
+)
+
+# terapkan hitung_akurasi() ke semua model sekaligus
+tabel_perbandingan <- t(sapply(daftar_ramalan, hitung_akurasi, actual = actual_test))
+tabel_perbandingan <- as.data.frame(round(tabel_perbandingan, 4))
+
+# urutkan dari MAPE terkecil (terbaik)
+tabel_perbandingan[order(tabel_perbandingan$MAPE), ]
+```
+
+Berdasarkan perbandingan sebelas model pada data uji, tiga model dengan MAPE terendah berasal dari SES, kemudian SMA. HW aditif optimum berada di posisi keempat dengan MAPE 9,89% dan masih cukup baik. Sementara itu, HW aditif manual dan HW multiplikatif memiliki MAPE lebih tinggi (36,99% dan 51,28%) karena parameter musimannya kurang sesuai. DMA dan beberapa DES juga kurang baik karena proyeksi trennya tidak sesuai dengan pola data yang cenderung stabil dan berfluktuasi. Berdasarkan RMSE, SMA sedikit lebih baik dari SES (α=0,7), tetapi performa ketiganya masih cukup berdekatan.
+
+Secara keseluruhan, SES dengan α optimum (≈0,749) tetap menjadi model terbaik. Nilai α diperoleh dari optimasi data latih tanpa menggunakan data uji. Hasil HW aditif optimum yang cukup baik juga menunjukkan bahwa pola tren dan musiman pada data tidak terlalu kuat, sehingga SES yang lebih sederhana tetap lebih sesuai.
