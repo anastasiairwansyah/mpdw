@@ -1,0 +1,279 @@
+---
+title: "Tugas Pertemuan 3"
+author: "Anastasia Salma Irwansyah"
+date: "2026-09-03"
+output:
+  html_document: 
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+---
+
+# Persiapan Data
+
+## Packages
+
+```{r}
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+library(ggplot2)
+```
+
+## Impor & Pembagian Data
+
+Data terdiri atas pengamatan per jam selama 3 hari (21-24 Oktober 2022, 72 observasi). Data dibagi menjadi data Training (60 observasi pertama) untuk membentuk model, dan data Testing (12 observasi terakhir, setara 12 jam terakhir) untuk menguji akurasi peramalan.
+
+```{r}
+# Impor Data
+data <- read.csv("NewDelhi_Air_quality.csv")
+data <- data[order(data$ts), ]  
+data$Yt <- data$AQI
+data$Xt <- data$CO
+
+# Mengecek jumlah data dan membagi data
+n        <- nrow(data)
+n_test   <- 12
+n_train  <- n - n_test
+
+train <- data[1:n_train, ]
+test  <- data[(n_train + 1):n, ]
+
+cat("Jumlah observasi total :", n, "\n")
+cat("Jumlah data training   :", n_train, "\n")
+cat("Jumlah data testing    :", n_test, "\n")
+cat("Rentang waktu training :", train$timestamp_local[1], "s.d.", train$timestamp_local[n_train], "\n")
+cat("Rentang waktu testing  :", test$timestamp_local[1], "s.d.", test$timestamp_local[n_test], "\n")
+
+# Mengubah format data menjadi objek Time Series (ts)
+train.ts <- ts(train)
+test.ts  <- ts(test)
+data.ts  <- ts(data)
+```
+
+# 1. Model Koyck
+
+## Pemodelan
+
+```{r}
+model.koyck <- koyckDlm(x = train$Xt, y = train$Yt)
+summary(model.koyck)
+```
+
+Interpretasi:
+
+Koefisien $Y_{t-1}$ sangat signifikan (p < 0.001), artinya AQI jam sebelumnya sangat memengaruhi AQI saat ini. Jadi, AQI memiliki persistensi/autokorelasi yang tinggi.
+
+Koefisien $X_t$ (CO) tidak signifikan (p > 0.05), artinya setelah mempertimbangkan AQI sebelumnya, pengaruh CO saat ini terhadap AQI menjadi lemah.
+
+Persamaan:
+$\hat{Y}_t = 1.6945 - 0.0034X_t + 0.9572Y_{t-1}$
+
+
+## Peramalan & Akurasi
+
+```{r}
+# Meramalkan 12 periode ke depan
+fore.koyck <- forecast(model = model.koyck, x = test$Xt, h = n_test)
+fore.koyck
+```
+
+```{r}
+# Cek Akurasi (MAPE) dan Deviance (SSE)
+mape.koyck <- MAPE(fore.koyck$forecasts, test$Yt)
+sse.koyck  <- sum(residuals(model.koyck$model)^2)
+
+cat("MAPE Model Koyck    :", round(mape.koyck, 4), "\n")
+cat("Deviance (SSE) Koyck:", round(sse.koyck, 4), "\n")
+```
+
+
+# 2. Distributed Lag Model (DLM)
+
+## Penentuan Lag Optimum (berdasarkan AIC)
+
+```{r}
+finiteDLMauto(formula = Yt ~ Xt,
+              data = data.frame(train), q.min = 1, q.max = 10,
+              model.type = "dlm", error.type = "AIC", trace = TRUE)
+```
+
+Interpretasi:
+
+Nilai AIC cenderung menurun seiring bertambahnya $q$, dengan minimum pada $q = 10$. Artinya, pengaruh CO terhadap AQI berlangsung hingga beberapa jam sebelumnya, bukan hanya saat ini.
+
+Namun, berdasarkan pola AIC, penurunan AIC belum menunjukkan titik balik hingga batas lag yang diuji. Oleh karena itu, q = 10 belum dapat dianggap sebagai lag optimum final dan menjadi salah satu keterbatasan akibat jumlah data training yang terbatas.
+
+## Pemodelan dengan Lag Optimum
+
+```{r}
+model.dlm.opt <- dlm(x = train$Xt, y = train$Yt, q = 10)
+summary(model.dlm.opt)
+```
+
+## Peramalan & Akurasi
+
+```{r}
+# Meramalkan 12 periode ke depan
+fore.dlm.opt <- forecast(model = model.dlm.opt, x = test$Xt, h = n_test)
+fore.dlm.opt
+```
+
+```{r}
+# Cek Akurasi (MAPE) dan Deviance (SSE)
+mape.dlm.opt <- MAPE(fore.dlm.opt$forecasts, test$Yt)
+sse.dlm.opt  <- sum(residuals(model.dlm.opt$model)^2)
+
+cat("MAPE Model DLM Optimum    :", round(mape.dlm.opt, 4), "\n")
+cat("Deviance (SSE) DLM Optimum:", round(sse.dlm.opt, 4), "\n")
+```
+
+
+# 3. Autoregressive Distributed Lag (ARDL)
+
+## Penentuan Kombinasi Lag Optimum
+
+```{r}
+model.ardl.opt <- ardlBoundOrders(data = data.frame(train), ic = "AIC",
+                                   formula = Yt ~ Xt, max.p = 6, max.q = 6)
+
+min_p <- c()
+for (i in 1:length(model.ardl.opt$Stat.table)) {
+  min_p[i] <- min(model.ardl.opt$Stat.table[[i]], na.rm = TRUE)
+}
+q_opt <- which(min_p == min(min_p, na.rm = TRUE))
+p_opt <- which(model.ardl.opt$Stat.table[[q_opt]] ==
+                 min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+
+data.frame("Lag_Y_opt(q)" = q_opt, "Lag_X_opt(p)" = p_opt,
+           "AIC" = model.ardl.opt$min.Stat)
+```
+
+## Pemodelan dengan Lag Optimum
+
+```{r}
+# Model ARDL dengan lag X = 6 dan lag Y = 1
+model.ardl <- ardlDlm(formula = Yt ~ Xt, data = train, p = p_opt, q = q_opt)
+summary(model.ardl)
+```
+
+Interpretasi:
+
+Koefisien CO ($X_t$) signifikan positif (p < 0.01), artinya kenaikan CO berpengaruh terhadap kenaikan AQI. Koefisien $Y_{t-1}$ juga sangat signifikan (p < 0.001), menunjukkan AQI memiliki persistensi yang tinggi dari jam sebelumnya.
+
+## Peramalan & Akurasi
+
+```{r}
+# Meramalkan 12 periode ke depan
+fore.ardl <- forecast(model = model.ardl, x = test$Xt, h = n_test)
+fore.ardl
+```
+
+
+```{r}
+# Cek Akurasi (MAPE) dan Deviance (SSE)
+mape.ardl <- MAPE(fore.ardl$forecasts, test$Yt)
+sse.ardl  <- sum(residuals(model.ardl$model)^2)
+
+cat("MAPE Model ARDL(", p_opt, ",", q_opt, ")    :", round(mape.ardl, 4), "\n")
+cat("Deviance (SSE) ARDL:", round(sse.ardl, 4), "\n")
+```
+
+# Evaluasi Asumsi Model
+
+Uji asumsi sisaan dilakukan menggunakan representasi `dynlm` yang setara dengan model ARDL terbaik (p = 6, q = 1) di atas, karena model ini memiliki performa peramalan terbaik.
+
+```{r}
+cons_lm3 <- dynlm(Yt ~ Xt + L(Xt, 1:p_opt) + L(Yt, 1:q_opt), data = train.ts)
+summary(cons_lm3)
+```
+
+## 1. Uji Autokorelasi (Durbin-Watson)
+
+$H_0$: Tidak ada autokorelasi pada sisaan.
+
+```{r}
+dwtest(cons_lm3)
+```
+
+## 2. Uji Heteroskedastisitas (Breusch-Pagan)
+
+$H_0$: Ragam sisaan homogen.
+
+```{r}
+bptest(cons_lm3)
+```
+
+## 3. Uji Normalitas (Shapiro-Wilk)
+
+$H_0$: Sisaan berdistribusi normal.
+
+```{r}
+shapiro.test(residuals(cons_lm3))
+```
+
+## Ringkasan Uji Asumsi
+
+- Autokorelasi: p-value = 0.0067 < 0.05,  Tolak H0, sehingga cukup bukti bahwa terdapat autokorelasi pada sisaan.
+
+- Heteroskedastisitas: p-value = 0.7644 > 0.05, Gagal Tolak H0, sehingga tidak cukup bukti bahwa ragam sisaan tidak homogen.
+
+- Normalitas: p-value = 0.4697 > 0.05, Gagal tolak H0, sehingga tidak cukup bukti bahwa sisaan tidak berdistribusi normal.
+
+Kesimpulan: model belum sepenuhnya memenuhi asumsi klasik karena masih terindikasi autokorelasi pada sisaan, meskipun tidak ada indikasi heteroskedastisitas maupun penyimpangan dari normalitas.
+
+
+# Perbandingan Performa Model
+
+## Akurasi (MAPE dan Deviance/SSE)
+
+```{r}
+akurasi <- data.frame(
+  Model = c("Koyck", paste0("DLM Optimum (q = ", 10, ")"),
+            paste0("ARDL (p = ", p_opt, ", q = ", q_opt, ")")),
+  MAPE = c(mape.koyck, mape.dlm.opt, mape.ardl),
+  Deviance_SSE = c(sse.koyck, sse.dlm.opt, sse.ardl)
+)
+akurasi
+```
+
+Model 3 ARDL (p = 6, q = 1) dipilih sebagai model terbaik karena memiliki MAPE dan SSE terkecil dibandingkan model lainnya. Hal ini menunjukkan bahwa model tersebut memberikan hasil peramalan paling akurat pada data testing.
+
+
+## Visualisasi Aktual vs Peramalan
+
+```{r}
+plot_df <- data.frame(
+  waktu   = 1:n_test,
+  Aktual  = test$Yt,
+  Koyck   = as.numeric(fore.koyck$forecasts),
+  DLM     = as.numeric(fore.dlm.opt$forecasts),
+  ARDL    = as.numeric(fore.ardl$forecasts)
+)
+
+plot_long <- reshape(plot_df, direction = "long",
+                      varying = c("Aktual","Koyck","DLM","ARDL"),
+                      v.names = "Nilai", timevar = "Seri",
+                      times = c("Aktual","Koyck","DLM","ARDL"))
+
+ggplot(plot_long, aes(x = waktu, y = Nilai, color = Seri, linetype = Seri)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c(Aktual = "black", Koyck = "red",
+                                 DLM = "blue", ARDL = "darkgreen")) +
+  labs(title = "Perbandingan Aktual vs Peramalan AQI (Data Testing)",
+       x = "Periode Testing (jam ke-)", y = "AQI") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+```
+
+
+# Kesimpulan
+
+- Ketiga metode (Koyck, DLM, dan ARDL) berhasil diterapkan pada data AQI dan CO New Delhi dengan lag optimum yang berbeda-beda: Koyck secara implisit meringkas seluruh lag ke dalam satu parameter $\lambda$, DLM optimum pada $q = 10$, dan ARDL optimum pada kombinasi $p = 6, q = 1$.
+- Berdasarkan metrik MAPE dan deviance (SSE), model ARDL ($p = 6, q = 1$) memberikan performa peramalan terbaik pada data testing di antara ketiga model yang diuji.
+- Evaluasi asumsi menunjukkan model terbaik masih belum sepenuhnya memenuhi asumsi klasik karena masih terindikasi autokorelasi pada sisaan, meskipun tidak ada indikasi heteroskedastisitas maupun penyimpangan dari normalitas.
