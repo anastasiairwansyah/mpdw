@@ -1827,10 +1827,8 @@ acf(ar2_sim, lag.max = 20, main = &quot;ACF AR(2) - arima.sim&quot;)</code></pre
 secara bertahap menuju nol (turun dari ≈0.68 di lag 1 menuju nol secara
 bertahap tanpa nilai negatif yang mencolok).</p>
 </div>
-</div>
-</div>
-<div id="plot-pacf-1" class="section level1">
-<h1>Plot PACF</h1>
+<div id="plot-pacf-1" class="section level3">
+<h3>Plot PACF</h3>
 <pre class="r"><code>par(mfrow = c(1, 2))
 pacf(ar2, main = &quot;PACF AR(2) - Manual&quot;)
 pacf(ar2_sim, main = &quot;PACF AR(2) - arima.sim&quot;)</code></pre>
@@ -1838,6 +1836,7 @@ pacf(ar2_sim, main = &quot;PACF AR(2) - arima.sim&quot;)</code></pre>
 <p>Pada PACF, pola cuts off setelah lag ke-2, dengan spike besar pada
 lag 1 (≈0.68) dan lag 2 (≈0.31), sedangkan lag berikutnya berada dalam
 pita kepercayaan. Pola ini sesuai dengan teori AR(2).</p>
+</div>
 <div id="plot-eacf-1" class="section level3">
 <h3>Plot EACF</h3>
 <pre class="r"><code>TSA::eacf(ar2)</code></pre>
@@ -1852,8 +1851,11 @@ pita kepercayaan. Pola ini sesuai dengan teori AR(2).</p>
 ## 6 o x o o o o o o o o o  o  o  o 
 ## 7 x x o x o o x o o o o  o  o  o</code></pre>
 <p>Pada EACF, pola segitiga nol tidak sepenuhnya jelas pada baris AR = 0
-dan AR = 1 karena galat sampling. Namun, pola yang terbentuk paling
-mendekati AR(2), MA(0), sesuai dengan model yang dibangkitkan.</p>
+dan AR = 1 karena galat sampling. Berfokus pada baris AR = 2 (orde AR
+sebenarnya), klaster ‘o’ konsisten baru mulai di kolom MA = 2, bukan MA
+= 0 seperti dugaan teoritis. Namun, hasilnya masih mengarah pada
+AR(2).</p>
+</div>
 </div>
 <div id="scatterplot-antar-lag-1" class="section level2">
 <h2>Scatterplot Antar Lag</h2>
@@ -2073,7 +2075,7 @@ autokorelasi jangka pendek yang cukup kuat (mendekati 0.9 di lag 1).</p>
   `EACF (hasil bangkitan)` = c(
     &quot;Tidak sepenuhnya bersih, condong ke MA \u2248 2&quot;,
     &quot;Mendekati AR \u2248 2, tapi titik awal segitiga nol bergeser ke MA \u2248 2 akibat galat sampling&quot;,
-    &quot;Paling sulit dibaca, tidak tegas di AR=2, MA=2&quot;
+    &quot;Paling sulit dibaca, tidak tegas di AR = 2, MA = 2&quot;
   ),
   Stasioner = c(
     &quot;Ya (selalu, untuk proses MA)&quot;,
@@ -2099,7 +2101,7 @@ ringkasan</code></pre>
 ##                                                                    EACF (hasil bangkitan)
 ## 1                                              Tidak sepenuhnya bersih, condong ke MA ≈ 2
 ## 2 Mendekati AR ≈ 2, tapi titik awal segitiga nol bergeser ke MA ≈ 2 akibat galat sampling
-## 3                                          Paling sulit dibaca, tidak tegas di AR=2, MA=2
+## 3                                      Paling sulit dibaca, tidak tegas di AR = 2, MA = 2
 ##                                Stasioner
 ## 1           Ya (selalu, untuk proses MA)
 ## 2 Ya (syarat kestasioneran AR terpenuhi)

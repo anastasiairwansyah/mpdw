@@ -156,8 +156,7 @@ $$
 Y_t = \phi_1 Y_{t-1} + \phi_2 Y_{t-2} + e_t, \qquad \phi_1 = 0.5,\ \phi_2 = 0.2
 $$
 
-Cek kestasioneran secara teoritis (syarat kestasioneran AR(2)):
-$\phi_1+\phi_2<1$, $\phi_2-\phi_1<1$, dan $|\phi_2|<1$.
+Cek kestasioneran secara teoritis (syarat kestasioneran AR(2)): $\phi_1+\phi_2<1$, $\phi_2-\phi_1<1$, dan $|\phi_2|<1$.
 
 ```{r}
 phi1_ar <- 0.5
@@ -403,8 +402,7 @@ Untuk ARMA campuran, nilai teoritisnya dapat diperoleh melalui fungsi ARMAacf().
 ARMAacf(ar = c(phi1_arma, phi2_arma), ma = c(theta1_arma, theta2_arma), lag.max = 3)
 ```
 
-Nilai teoritis yang dihasilkan adalah $\rho_1=0.859$, $\rho_2=0.749$, dan $\rho_3=0.546$, dibandingkan hasil bangkitan $r_1=0.890$, $r_2=0.836$, dan
-$r_3=0.706$, serta $0.890$, $0.835$, $0.703$ dari acf(). Ketiganya berada pada kisaran yang sama dan menurun secara berangsur (bukan terputus tegas), sesuai karakteristik ACF proses ARMA campuran, dengan selisih antar-metode yang wajar karena $n=300$ dan proses ini memiliki autokorelasi jangka pendek yang cukup kuat (mendekati 0.9 di lag 1).
+Nilai teoritis yang dihasilkan adalah $\rho_1=0.859$, $\rho_2=0.749$, dan $\rho_3=0.546$, dibandingkan hasil bangkitan $r_1=0.890$, $r_2=0.836$, dan $r_3=0.706$, serta $0.890$, $0.835$, $0.703$ dari acf(). Ketiganya berada pada kisaran yang sama dan menurun secara berangsur (bukan terputus tegas), sesuai karakteristik ACF proses ARMA campuran, dengan selisih antar-metode yang wajar karena $n=300$ dan proses ini memiliki autokorelasi jangka pendek yang cukup kuat (mendekati 0.9 di lag 1).
 
 
 
@@ -429,7 +427,7 @@ ringkasan <- data.frame(
   `EACF (hasil bangkitan)` = c(
     "Tidak sepenuhnya bersih, condong ke MA \u2248 2",
     "Mendekati AR \u2248 2, tapi titik awal segitiga nol bergeser ke MA \u2248 2 akibat galat sampling",
-    "Paling sulit dibaca, tidak tegas di AR=2, MA=2"
+    "Paling sulit dibaca, tidak tegas di AR = 2, MA = 2"
   ),
   Stasioner = c(
     "Ya (selalu, untuk proses MA)",
