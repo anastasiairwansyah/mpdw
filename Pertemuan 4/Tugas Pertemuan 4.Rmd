@@ -215,7 +215,7 @@ acf(ar2_sim, lag.max = 20, main = "ACF AR(2) - arima.sim")
 
 Pada plot ACF, pola tails off terlihat dari korelasi yang menurun secara bertahap menuju nol (turun dari ≈0.68 di lag 1 menuju nol secara bertahap tanpa nilai negatif yang mencolok).
 
-# Plot PACF
+### Plot PACF
 
 ```{r}
 par(mfrow = c(1, 2))
@@ -231,7 +231,7 @@ Pada PACF, pola cuts off setelah lag ke-2, dengan spike besar pada lag 1 (≈0.6
 TSA::eacf(ar2)
 ```
 
-Pada EACF, pola segitiga nol tidak sepenuhnya jelas  pada baris AR = 0 dan AR = 1 karena galat sampling. Namun, pola yang terbentuk paling mendekati AR(2), MA(0), sesuai dengan model yang dibangkitkan.
+Pada EACF, pola segitiga nol tidak sepenuhnya jelas pada baris AR = 0 dan AR = 1 karena galat sampling. Berfokus pada baris AR = 2 (orde AR sebenarnya), klaster 'o' konsisten baru mulai di kolom MA = 2, bukan MA = 0 seperti dugaan teoritis. Namun, hasilnya masih mengarah pada AR(2).
 
 ## Scatterplot Antar Lag
 
